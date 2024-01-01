@@ -1,0 +1,31 @@
+[tool.yapf]
+based_on_style = "pep8"
+column_limit = 94
+spaces_before_comment = 4
+
+[tool.ruff]
+tab-size = 4
+line-length = 94
+select = [	## ref: https://beta.ruff.rs/docs/rules/
+	"E",	# pycodestyle Error
+	"W",	# pycodestyle Warning
+	"I",	# isort
+	"F",	# Pyflakes
+	"A",	# flake8-builtins
+	"B",	# flake8-bugbear
+	"Q",	# flake8-quotes
+	"C4",	# flake8-comprehensions
+	"COM",	# flake8-commas
+	"SIM",	# flake8-simplify
+]
+ignore = [	## ref: https://pep8.readthedocs.io/en/release-1.7.x/intro.html#error-codes
+	"E266", # too many leading ‘#’ for block comment
+	"E731", # do not assign a lambda expression, use a def
+	"I001", # Import block is un-sorted or un-formatted
+]
+src = ["."]
+
+  [tool.ruff.flake8-quotes]
+  inline-quotes = "single"
+  multiline-quotes = "single"
+  docstring-quotes = "single"
