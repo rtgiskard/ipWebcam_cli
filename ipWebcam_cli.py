@@ -158,31 +158,31 @@ class Webcam:
                              stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL)
 
-        # use the last device
         out, _ = p.communicate()
         return f'/dev/{out.decode().split()[-1]}' if out else ''
 
     def get_gst_source_elem(self, url: str) -> str:
         return (f'souphttpsrc location="{url}" do-timestamp=true is-live=true'
-                f' ssl-strict={self.config.ssl_strict}')
+                f' ssl-strict={str(self.config.ssl_strict).lower()}')
 
     def audio_launch_gst(self, url: str, sink_name: str):
         self.logger.info(f'audio launch (gst) to sink: {sink_name} ..')
 
+        sync_str = str(self.config.sync).lower()
         p = Utils.m_subp_run(
             f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
-            f' ! queue ! decodebin ! pulsesink device="{sink_name}" sync={self.config.sync}')
+            f' ! queue ! decodebin ! pulsesink device="{sink_name}" sync={sync_str}')
         self.subp.append(p)
 
     def video_launch_gst(self, url: str, sink_dev: str):
         self.logger.info(f'video launch (gst) to sink: {sink_dev} ..')
 
-        # TODO: video detect and copy
+        sync_str = str(self.config.sync).lower()
         p = Utils.m_subp_run(
             f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
             f' ! queue ! multipartdemux ! image/jpeg,framerate={self.config.v_fps}'
             f' ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=YUY2'
-            f' ! v4l2sink device="{sink_dev}" sync={self.config.sync}')
+            f' ! tee ! v4l2sink device="{sink_dev}" sync={sync_str}')
         self.subp.append(p)
 
     def video_launch_ffmpeg(self, url: str, sink_dev: str):

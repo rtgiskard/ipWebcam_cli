@@ -34,7 +34,6 @@ thanks a lot for the works!
 == Todo
 
 - [ ] audio source as microphone input along with v4l2 video
-- [ ] support to launch v4l2 video with gstreamer
 - [ ] support IPWebcam with `adb` via USB cable
 
 
