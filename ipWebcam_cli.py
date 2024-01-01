@@ -162,7 +162,7 @@ class Webcam:
         return f'/dev/{out.decode().split()[-1]}' if out else ''
 
     def get_gst_source_elem(self, url: str) -> str:
-        return (f'souphttpsrc location="{url}" do-timestamp=true is-live=true'
+        return (f'souphttpsrc location="{url}" is-live=true'
                 f' ssl-strict={str(self.config.ssl_strict).lower()}')
 
     def audio_launch_gst(self, url: str, sink_name: str):
@@ -179,7 +179,7 @@ class Webcam:
 
         sync_str = str(self.config.sync).lower()
         p = Utils.m_subp_run(
-            f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
+            f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)} do-timestamp=true'
             f' ! queue ! multipartdemux ! image/jpeg,framerate={self.config.v_fps}'
             f' ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=YUY2'
             f' ! tee ! v4l2sink device="{sink_dev}" sync={sync_str}')
