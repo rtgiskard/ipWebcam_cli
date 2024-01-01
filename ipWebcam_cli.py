@@ -239,7 +239,7 @@ class Webcam:
             args = Utils.parse_args(argv)
             self.config = Config.model_validate(vars(args))
         except Exception as e:
-            self.logger.error(f'failed to parse args: {e}')
+            print(f'** failed to parse args and init config: {e}')
             return
 
         Utils.config_logging(logging.getLevelName(self.config.loglevel.upper()))
