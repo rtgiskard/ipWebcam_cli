@@ -13,6 +13,7 @@ from urllib.parse import urlparse, urlunparse
 
 
 class Const:
+    LOG_LEVELS = ['critical', 'error', 'warn', 'info', 'debug']
     GST_LAUNCH = 'gst-launch-1.0 -q --no-position'
     FFMPEG = 'ffmpeg -nostdin -loglevel warning'
     MPV = 'mpv'
@@ -26,7 +27,8 @@ class Utils:
             prog='ipWebcam_cli',
             description='script to use IPWebcam as v4l2 webcam / sound source')
 
-        parser.add_argument('--ip', help='webcam ip addr', type=str)
+        parser.add_argument('--loglevel', default='info', choices=Const.LOG_LEVELS)
+        parser.add_argument('--ip', help='webcam ip addr', required=True)
         parser.add_argument('--port', help='ipWebcam listen port', default=8686)
         parser.add_argument('--username', help='username to access IPWebcam', default='')
         parser.add_argument('--password', help='password to access IPWebcam', default='')
@@ -44,29 +46,26 @@ class Utils:
                             dest='video',
                             action='store_false')
         parser.add_argument('--acodec',
-                            help='audio codec',
+                            help='select audio stream of the codec',
                             dest='a_codec',
-                            choices=['wav', 'aac', 'opus'],
-                            default='opus')
+                            default='opus',
+                            choices=['wav', 'aac', 'opus'])
         parser.add_argument('--vmethod',
                             help='video capture method',
                             dest='v_method',
-                            choices=['ffmpeg', 'gst'],
-                            default='ffmpeg')
-        parser.add_argument('--fps',
-                            help='gst video fps',
-                            dest='v_fps',
-                            choices=[30, 60],
-                            default=60,
-                            type=int)
+                            default='ffmpeg',
+                            choices=['ffmpeg', 'gst'])
+        parser.add_argument('--fps', help='gst video fps', dest='v_fps', default='60/1')
         parser.add_argument('--sync', help='enable gst timesync', action='store_true')
 
-        parser.add_argument('op', help='webcam operation', choices=['run', 'test'])
+        sub_parsers = parser.add_subparsers(dest='op', help='operation', required=True)
+        sub_parsers.add_parser('run', help='launch webcam with v4l2')
+        sub_parsers.add_parser('test', help='check and play the webcam directly')
 
         return parser.parse_args(argv)
 
     @staticmethod
-    def config_logging(loglevel=logging.DEBUG):
+    def config_logging(loglevel: int = logging.DEBUG):
 
         class SingleCharFormatter(logging.Formatter):
 
@@ -86,14 +85,13 @@ class Utils:
         logger.addHandler(console_handler)
 
         # silent some other no care messages
-        logging.getLogger('urllib3').setLevel(logging.WARNING)
-
         import urllib3
         urllib3.disable_warnings()
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
 
     @staticmethod
     def m_subp_run(cmd: str, wait: bool = False) -> subprocess.Popen:
-        logging.getLogger('subp').debug(cmd)
+        logging.getLogger('subprocess').debug(cmd)
         p = subprocess.Popen(cmd, shell=True)
         if p and wait:
             p.wait()
@@ -105,7 +103,7 @@ class Utils:
             resp = requests.get(url, timeout=3, stream=True, verify=ssl_strict)
             resp.raise_for_status()
         except requests.RequestException as e:
-            logging.debug(f'failed to access URL({url}), {e}')
+            logging.getLogger('check').warning(f'failed to access URL({url}), {e}')
             return False
 
         return True
@@ -114,7 +112,6 @@ class Utils:
     def url_remove_auth(url: str) -> str:
         _url = urlparse(url)
         _url_netloc = _url.netloc.split('@')[-1]
-
         return urlunparse(
             (_url.scheme, _url_netloc, _url.path, _url.params, _url.query, _url.fragment))
 
@@ -122,9 +119,9 @@ class Utils:
 class Config(BaseModel):
     ip: str
     port: int
-
     username: str = ''
     password: str = ''
+    loglevel: str = 'debug'
 
     tls: bool = Field(default=True, description='use https')
     ssl_strict: bool = Field(default=True, description='strict SSL certificate checking')
@@ -132,7 +129,7 @@ class Config(BaseModel):
     sync: bool = Field(default=False, description='enable gst A/V timesync')
     audio: bool = Field(default=True, description='enable audio capture')
     video: bool = Field(default=True, description='enable video capture')
-    v_fps: int = Field(default=60, description='video source FPS')
+    v_fps: str = Field(default='60/1', description='video source FPS')
     v_method: str = Field(default='ffmpeg',
                           pattern='(ffmpeg)|(gst)',
                           description='video capture method')
@@ -147,8 +144,7 @@ class Webcam:
     subp: List[subprocess.Popen] = []
 
     def __init__(self):
-        Utils.config_logging()
-        self.logger = logging.getLogger('webcam')
+        self.logger = logging.getLogger('main')
 
     def load_kmod_v4l2loopback(self):
         self.logger.info('load kernel module: v4l2loopback ..')
@@ -161,6 +157,8 @@ class Webcam:
         p = subprocess.Popen('ls /sys/devices/virtual/video4linux/'.split(),
                              stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL)
+
+        # use the last device
         out, _ = p.communicate()
         return f'/dev/{out.decode().split()[-1]}' if out else ''
 
@@ -190,7 +188,7 @@ class Webcam:
     def video_launch_ffmpeg(self, url: str, sink_dev: str):
         self.logger.info(f'video launch (ffmpeg) to sink: {sink_dev} ..')
 
-        p = Utils.m_subp_run(f'{Const.FFMPEG} -i "{url}" -v copy -f v4l2 {sink_dev}')
+        p = Utils.m_subp_run(f'{Const.FFMPEG} -i "{url}" -c:v copy -f v4l2 {sink_dev}')
         self.subp.append(p)
 
     def video_play_mpv(self, url: str):
@@ -243,6 +241,8 @@ class Webcam:
         except Exception as e:
             self.logger.error(f'failed to parse args: {e}')
             return
+
+        Utils.config_logging(logging.getLevelName(self.config.loglevel.upper()))
 
         self.logger.debug(f'config:\n{self.config.model_dump_json(indent=2)}')
         self.setup(args.op)
