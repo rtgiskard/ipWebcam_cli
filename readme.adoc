@@ -1,0 +1,47 @@
+= ipWebcam_cli
+
+A script to use IPWebcam as v4l2 webcam / sound source
+
+Core part of this project is mainly based on
+https://github.com/agarciadom/ipwebcam-gst[ipwebcam-gst] and
+https://github.com/Kyuunex/ip_webcam_linux_client[ip_webcam_linux_client],
+thanks a lot for the works!
+
+
+== Dependencies
+
+- utils: `gst-launch-1.0`, `ffmpeg`, `mpv`
+- kmod: `v4l2loopback`
+
+
+== HowTo
+
+```
+# check the help first
+./ipWebcam_cli.py -h
+
+# test webcam on https://10.10.10.10:1010, and force tls verification
+./ipWebcam_cli.py --ip 10.10.10.10 --port 1010 --tls --ssl-strict test
+
+# use http, select aac audio stream, and disable video
+./ipWebcam_cli.py --ip 10.10.10.10 --port 1010 -vn --acodec aac test
+
+# launch as local virtual v4l2 webcam with IPWebcam source (https without verification)
+./ipWebcam_cli.py --ip 10.10.10.10 --port 1010 --tls run
+```
+
+
+== Todo
+
+- [ ] audio source as microphone input along with v4l2 video (not sure)
+- [ ] support to launch v4l2 video with gstreamer
+- [ ] support IPWebcam with `adb` via USB cable
+
+
+== 🧾 License
+
+This project is licensed under the terms of the https://www.gnu.org/licenses/gpl-3.0.html[GPLv3] or any later version.
+
+
+---
+image::https://storage.ko-fi.com/cdn/kofi1.png?v=3[height=40,link='https://ko-fi.com/E1E8MKPBZ']
