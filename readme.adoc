@@ -8,13 +8,13 @@ https://github.com/Kyuunex/ip_webcam_linux_client[ip_webcam_linux_client],
 thanks a lot for the works!
 
 
-== Dependencies
+== Requirements
 
-- utils: `gst-launch-1.0`, `ffmpeg`, `mpv`
-- kmod: `v4l2loopback`
+- kernel module: `v4l2loopback`
+- system tools: `gst-launch-1.0`, `ffmpeg`, `mpv`
 
 
-== HowTo
+== Usage
 
 ```
 # check the help first
@@ -33,12 +33,12 @@ thanks a lot for the works!
 
 == Todo
 
-- [ ] audio source as microphone input along with v4l2 video (not sure)
+- [ ] audio source as microphone input along with v4l2 video
 - [ ] support to launch v4l2 video with gstreamer
 - [ ] support IPWebcam with `adb` via USB cable
 
 
-== 🧾 License
+== License
 
 This project is licensed under the terms of the https://www.gnu.org/licenses/gpl-3.0.html[GPLv3] or any later version.
 
