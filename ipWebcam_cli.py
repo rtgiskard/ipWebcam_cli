@@ -141,11 +141,18 @@ class Webcam:
         self.logger = logging.getLogger('main')
 
     def load_kmod_v4l2loopback(self):
-        self.logger.info('load kernel module: v4l2loopback ..')
+        mod_name, mod_args = ('v4l2loopback', 'exclusive_caps=1')
+        mod_loaded = False
 
-        v4l2_args = 'exclusive_caps=1'
-        Utils.m_subp_run(
-            f'lsmod | grep -q v4l2loopback || sudo modprobe v4l2loopback {v4l2_args}', True)
+        with open('/proc/modules') as fd:
+            for line in fd:
+                if line.startswith(f'{mod_name} '):
+                    mod_loaded = True
+                    break
+
+        if not mod_loaded:
+            self.logger.info(f'load kernel module: {mod_name} ..')
+            Utils.m_subp_run(f'sudo modprobe {mod_name} {mod_args}', True)
 
     def get_v4l2_virtual_dev(self) -> str:
         for vdev in os.scandir('/sys/devices/virtual/video4linux/'):
