@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import sys
 import argparse
 import logging
@@ -146,13 +147,11 @@ class Webcam:
         Utils.m_subp_run(
             f'lsmod | grep -q v4l2loopback || sudo modprobe v4l2loopback {v4l2_args}', True)
 
-    def get_v4l2_virtual_dev_last(self) -> str:
-        p = subprocess.Popen('ls /sys/devices/virtual/video4linux/'.split(),
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL)
-
-        out, _ = p.communicate()
-        return f'/dev/{out.decode().split()[-1]}' if out else ''
+    def get_v4l2_virtual_dev(self) -> str:
+        for vdev in os.scandir('/sys/devices/virtual/video4linux/'):
+            return f'/dev/{vdev.name}'
+        else:
+            return ''
 
     def get_gst_source_elem(self, url: str) -> str:
         return (f'souphttpsrc location="{url}" is-live=true'
@@ -218,7 +217,7 @@ class Webcam:
             else:    # launch to v4l2 sink device as virtual webcam
                 self.load_kmod_v4l2loopback()
 
-                sink_dev = self.get_v4l2_virtual_dev_last()
+                sink_dev = self.get_v4l2_virtual_dev()
                 if not sink_dev:
                     return ''
 
