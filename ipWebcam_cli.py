@@ -66,22 +66,15 @@ class Utils:
 
     @staticmethod
     def config_logging(loglevel: int = logging.DEBUG):
-
-        class SingleCharFormatter(logging.Formatter):
-
-            def format(self, record):    # noqa: A003
-                record.levelname = record.levelname[0]
-                return super().format(record)
-
-        logger = logging.getLogger()
-        logger.setLevel(loglevel)
-
         console_handler = logging.StreamHandler()
         console_handler.setLevel(loglevel)
         console_handler.setFormatter(
-            SingleCharFormatter('%(asctime)s.%(msecs)d %(levelname)s %(name)s: %(message)s',
-                                datefmt='%Y%m%d_%H%M%S'))
+            logging.Formatter(fmt='{asctime}.{msecs:03.0f} {levelname[0]} {name}: {message}',
+                              style='{',
+                              datefmt='%Y%m%d_%H%M%S'))
 
+        logger = logging.getLogger()
+        logger.setLevel(loglevel)
         logger.addHandler(console_handler)
 
         # silent some other no care messages
