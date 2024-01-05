@@ -1,11 +1,12 @@
 = ipWebcam_cli
 
-A script to use IPWebcam as v4l2 webcam / sound source
+tool to use IPWebcam as v4l2 webcam or microphone
 
-Core part of this project is mainly based on
+Thanks for the work of
 https://github.com/agarciadom/ipwebcam-gst[ipwebcam-gst] and
 https://github.com/Kyuunex/ip_webcam_linux_client[ip_webcam_linux_client],
-thanks a lot for the works!
+which provide a reference for the operations related to v4l2 webcam and pipewire
+virtual microphone.
 
 
 == Requirements
@@ -33,9 +34,17 @@ thanks a lot for the works!
 
 == Todo
 
-- [ ] audio source as microphone input along with v4l2 video
+- [x] audio source as microphone input along with v4l2 video
 - [ ] support IPWebcam with `adb` via USB cable
 
+
+There're still some issues to be fixed:
+
+. if the `run` subcommand failed for v4l2 related operation, reload `v4l2loopback` should resolve it.
+	By the way, the video capture method `ffmpeg` seems to be more stable than `gst` for `run` mode.
+. On default audio output device switch, the virtual microphone may loose the link from audio capture
+	process to the created virtual sink, which is the input source for the virual microphone. Either
+	a restart or a manually relink with `pw-link` will resolve it.
 
 == License
 
