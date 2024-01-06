@@ -4,6 +4,7 @@ import os
 import sys
 import argparse
 import logging
+import contextlib
 import subprocess
 import requests
 
@@ -29,7 +30,8 @@ class Utils:
             description='tool to use IPWebcam as v4l2 webcam or microphone')
 
         parser.add_argument('--loglevel', default='info', choices=Const.LOG_LEVELS)
-        parser.add_argument('--ip', help='webcam ip addr', required=True)
+        parser.add_argument('--use-adb', help='connect with adb', action='store_true')
+        parser.add_argument('--ip', help='webcam ip addr', default='127.0.0.1')
         parser.add_argument('--port', help='ipWebcam listen port', default=8686)
         parser.add_argument('--username', help='username to access IPWebcam', default='')
         parser.add_argument('--password', help='password to access IPWebcam', default='')
@@ -59,9 +61,9 @@ class Utils:
         parser.add_argument('--fps', help='gst video fps', dest='v_fps', default='60/1')
         parser.add_argument('--sync', help='enable gst timesync', action='store_true')
 
-        sub_parsers = parser.add_subparsers(dest='op', help='operation', required=True)
-        sub_parsers.add_parser('run', help='launch webcam with v4l2')
-        sub_parsers.add_parser('test', help='check and play the webcam directly')
+        sub_parsers = parser.add_subparsers(dest='mode', help='operation mode', required=True)
+        sub_parsers.add_parser('run', help='launch webcam with v4l2 and audio as microphone')
+        sub_parsers.add_parser('test', help='check and play directly')
 
         return parser.parse_args(argv)
 
@@ -118,6 +120,7 @@ class Config(BaseModel):
     username: str = ''
     password: str = ''
     loglevel: str = 'debug'
+    use_adb: bool = False
 
     tls: bool = Field(default=True, description='use https')
     ssl_strict: bool = Field(default=True, description='strict SSL certificate checking')
@@ -142,6 +145,15 @@ class Webcam:
 
     def __init__(self):
         self.logger = logging.getLogger('main')
+
+    def adb_forward(self):
+        self.config.ip = '127.0.0.1'
+        Utils.m_subp_run(f'adb forward tcp:{self.config.port} tcp:{self.config.port}',
+                         True,
+                         stdout=subprocess.DEVNULL)
+
+    def adb_forward_reset(self):
+        Utils.m_subp_run(f'adb forward --remove tcp:{self.config.port}', True)
 
     def load_kmod_v4l2loopback(self):
         mod_name, mod_args = ('v4l2loopback', 'exclusive_caps=1')
@@ -250,6 +262,9 @@ class Webcam:
     def setup(self, mode: str):
         c = self.config
 
+        if c.use_adb:
+            self.adb_forward()
+
         url_base = self.get_url_base()
         url_video = f'{url_base}/video'
         url_audio = f'{url_base}/audio.{c.a_codec}'
@@ -279,17 +294,24 @@ class Webcam:
                 self.logger.warning(f'mode {mode}: {c.v_method} method not supported')
                 return
 
-            if mode == 'test':    # display video without v4l2
+            if mode == 'test':
                 method_handlers[c.v_method](url_video)
-
-            else:    # launch to v4l2 sink device as virtual webcam
+            else:
                 self.load_kmod_v4l2loopback()
 
                 sink_dev = self.get_v4l2_virtual_dev()
                 if not sink_dev:
-                    return ''
+                    self.logger.warning('failed to find v4l2 device')
+                    return
 
                 method_handlers[c.v_method](url_video, sink_dev)
+
+    def cleanup(self, mode: str):
+        if mode == 'run' and self.config.audio:
+            self.virtual_mic_cleanup()
+
+        if self.config.use_adb:
+            self.adb_forward_reset()
 
     def run(self, argv: List[str]):
         try:
@@ -302,18 +324,14 @@ class Webcam:
         Utils.config_logging(logging.getLevelName(self.config.loglevel.upper()))
 
         self.logger.debug(f'config:\n{self.config.model_dump_json(indent=2)}')
-        self.setup(args.op)
+        self.setup(args.mode)
 
-        try:
-            for p in self.subp:
+        for p in self.subp:
+            with contextlib.suppress(KeyboardInterrupt):
                 p.wait()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            if args.op == 'run' and self.config.audio:
-                self.virtual_mic_cleanup()
 
         self.subp.clear()
+        self.cleanup(args.mode)
 
 
 if __name__ == '__main__':
