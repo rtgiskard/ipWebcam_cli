@@ -27,16 +27,15 @@ virtual microphone.
 # use http, select aac audio stream, and disable video
 ./ipWebcam_cli.py --ip 10.10.10.10 --port 1010 -vn --acodec aac test
 
-# launch as local virtual v4l2 webcam with IPWebcam source (https without verification)
+# launch as local virtual v4l2 webcam with IPWebcam source (https without cert verification)
 ./ipWebcam_cli.py --ip 10.10.10.10 --port 1010 --tls run
+
+# connect with adb, use video method ffmpeg for run mode
+./ipWebcam_cli.py --use-adb --port 1010 --vmethod ffmpeg run
 ```
 
 
 == Todo
-
-- [x] audio source as microphone input along with v4l2 video
-- [ ] support IPWebcam with `adb` via USB cable
-
 
 There're still some issues to be fixed:
 
