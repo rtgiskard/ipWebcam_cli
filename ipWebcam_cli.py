@@ -92,12 +92,14 @@ class Utils:
         return p
 
     @staticmethod
-    def check_http_url(url: str, ssl_strict: bool = True) -> bool:
+    def check_url(url: str, ssl_strict: bool = True) -> bool:
+        logger = logging.getLogger('check')
         try:
+            logger.debug(f'get url: {url} ..')
             resp = requests.get(url, timeout=3, stream=True, verify=ssl_strict)
             resp.raise_for_status()
         except requests.RequestException as e:
-            logging.getLogger('check').warning(f'failed to access URL({url}), {e}')
+            logger.warning(f'on get url: {e}')
             return False
 
         return True
@@ -215,10 +217,10 @@ class Webcam:
 
         self.logger.info(f'web control: {url_base}')
 
-        if c.audio and Utils.check_http_url(url_audio, c.ssl_strict):
+        if c.audio and Utils.check_url(url_audio, c.ssl_strict):
             self.audio_launch_gst(url_audio, c.sinkname)
 
-        if c.video and Utils.check_http_url(url_video, c.ssl_strict):
+        if c.video and Utils.check_url(url_video, c.ssl_strict):
             if mode == 'test':    # display video without v4l2
                 self.video_play_mpv(url_video)
             else:    # launch to v4l2 sink device as virtual webcam
