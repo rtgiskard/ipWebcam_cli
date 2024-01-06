@@ -11,8 +11,6 @@ import requests
 from typing import List
 from pydantic import BaseModel, Field
 
-from urllib.parse import urlparse, urlunparse
-
 
 class Const:
     LOG_LEVELS = ['critical', 'error', 'warn', 'info', 'debug']
@@ -62,13 +60,6 @@ class Utils:
             return False
 
         return True
-
-    @staticmethod
-    def url_remove_auth(url: str) -> str:
-        _url = urlparse(url)
-        _url_netloc = _url.netloc.split('@')[-1]
-        return urlunparse(
-            (_url.scheme, _url_netloc, _url.path, _url.params, _url.query, _url.fragment))
 
 
 class Config(BaseModel):
