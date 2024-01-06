@@ -29,3 +29,20 @@ src = ["."]
   inline-quotes = "single"
   multiline-quotes = "single"
   docstring-quotes = "single"
+
+[tool.poetry]
+name = "ipwebcam_cli"
+version = "0.1.0"
+description = "tool to use IPWebcam as v4l2 webcam or microphone"
+authors = ["giskard <rtgiskard@gmail.com>"]
+license = "GPLv3"
+readme = "readme.adoc"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^2.5.3"
+requests = "^2.31.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
