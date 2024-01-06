@@ -16,56 +16,13 @@ from urllib.parse import urlparse, urlunparse
 
 class Const:
     LOG_LEVELS = ['critical', 'error', 'warn', 'info', 'debug']
+    MODPROBE = 'sudo modprobe'
     GST_LAUNCH = 'gst-launch-1.0 -q --no-position'
     FFMPEG = 'ffmpeg -nostdin -loglevel warning'
     MPV = 'mpv'
 
 
 class Utils:
-
-    @staticmethod
-    def parse_args(argv: List[str]) -> argparse.Namespace:
-        parser = argparse.ArgumentParser(
-            prog='ipWebcam_cli',
-            description='tool to use IPWebcam as v4l2 webcam or microphone')
-
-        parser.add_argument('--loglevel', default='info', choices=Const.LOG_LEVELS)
-        parser.add_argument('--use-adb', help='connect with adb', action='store_true')
-        parser.add_argument('--ip', help='webcam ip addr', default='127.0.0.1')
-        parser.add_argument('--port', help='ipWebcam listen port', default=8686)
-        parser.add_argument('--username', help='username to access IPWebcam', default='')
-        parser.add_argument('--password', help='password to access IPWebcam', default='')
-        parser.add_argument('--tls', help='use https, default to http', action='store_true')
-        parser.add_argument('--ssl-strict',
-                            help='force TLS cert verification',
-                            action='store_true')
-
-        parser.add_argument('--an',
-                            help='disable audio capture',
-                            dest='audio',
-                            action='store_false')
-        parser.add_argument('--vn',
-                            help='disable video capture',
-                            dest='video',
-                            action='store_false')
-        parser.add_argument('--acodec',
-                            help='select audio stream of the codec',
-                            dest='a_codec',
-                            default='opus',
-                            choices=['wav', 'aac', 'opus'])
-        parser.add_argument('--vmethod',
-                            help='video capture method',
-                            dest='v_method',
-                            default='gst',
-                            choices=['gst', 'ffmpeg', 'mpv'])
-        parser.add_argument('--fps', help='gst video fps', dest='v_fps', default='60/1')
-        parser.add_argument('--sync', help='enable gst timesync', action='store_true')
-
-        sub_parsers = parser.add_subparsers(dest='mode', help='operation mode', required=True)
-        sub_parsers.add_parser('run', help='launch webcam with v4l2 and audio as microphone')
-        sub_parsers.add_parser('test', help='check and play directly')
-
-        return parser.parse_args(argv)
 
     @staticmethod
     def config_logging(loglevel: int = logging.DEBUG):
@@ -119,23 +76,18 @@ class Config(BaseModel):
     port: int
     username: str = ''
     password: str = ''
-    loglevel: str = 'debug'
+    tls: bool = True
+    ssl_strict: bool = True
     use_adb: bool = False
 
-    tls: bool = Field(default=True, description='use https')
-    ssl_strict: bool = Field(default=True, description='strict SSL certificate checking')
-
-    sync: bool = Field(default=False, description='enable gst A/V timesync')
-    audio: bool = Field(default=True, description='enable audio capture')
-    video: bool = Field(default=True, description='enable video capture')
-    v_fps: str = Field(default='60/1', description='video source FPS')
-    v_method: str = Field(default='gst',
-                          pattern='(gst)|(ffmpeg)|(mpv)',
-                          description='video capture method')
-    a_codec: str = Field(default='opus',
-                         pattern='(opus)|(aac)|(wav)',
-                         description='audio codec to seclect the stream')
-    sinkname: str = Field(default='IPWebcam', description='audio sink name')
+    sync: bool = False
+    audio: bool = True
+    video: bool = True
+    v_fps: str = '60/1'
+    v_method: str = Field(default='gst', pattern='(gst)|(ffmpeg)|(mpv)')
+    a_codec: str = Field(default='opus', pattern='(opus)|(aac)|(wav)')
+    sinkname: str = 'IPWebcam'
+    loglevel: str = 'debug'
 
 
 class Webcam:
@@ -146,8 +98,52 @@ class Webcam:
     def __init__(self):
         self.logger = logging.getLogger('main')
 
+    def parse_args(self, argv: List[str]) -> argparse.Namespace:
+        parser = argparse.ArgumentParser(
+            prog='ipWebcam_cli',
+            description='tool to use IPWebcam as v4l2 webcam or microphone')
+
+        parser.add_argument('--loglevel', default='info', choices=Const.LOG_LEVELS)
+        parser.add_argument('--use-adb', help='connect with adb', action='store_true')
+        parser.add_argument('--ip', help='webcam ip addr', default='127.0.0.1')
+        parser.add_argument('--port', help='ipWebcam listen port', default=8686)
+        parser.add_argument('--username', help='username to access IPWebcam', default='')
+        parser.add_argument('--password', help='password to access IPWebcam', default='')
+        parser.add_argument('--tls', help='use https, default to http', action='store_true')
+        parser.add_argument('--ssl-strict',
+                            help='force TLS cert verification',
+                            action='store_true')
+
+        parser.add_argument('--an',
+                            help='disable audio capture',
+                            dest='audio',
+                            action='store_false')
+        parser.add_argument('--vn',
+                            help='disable video capture',
+                            dest='video',
+                            action='store_false')
+        parser.add_argument('--acodec',
+                            help='audio codec to seclect the stream',
+                            dest='a_codec',
+                            default='opus',
+                            choices=['wav', 'aac', 'opus'])
+        parser.add_argument('--vmethod',
+                            help='video capture method',
+                            dest='v_method',
+                            default='gst',
+                            choices=['gst', 'ffmpeg', 'mpv'])
+        parser.add_argument('--fps', help='provide video fps', dest='v_fps', default='60/1')
+        parser.add_argument('--sync', help='enable gst A/V timesync', action='store_true')
+        parser.add_argument('--sinkname', help='audio sink name', default='IPWebcam')
+
+        sub_parsers = parser.add_subparsers(dest='mode', help='operation mode', required=True)
+        sub_parsers.add_parser('run', help='launch webcam with v4l2 and audio as microphone')
+        sub_parsers.add_parser('test', help='check and play directly')
+
+        return parser.parse_args(argv)
+
     def adb_forward(self):
-        self.config.ip = '127.0.0.1'
+        self.config.ip = '127.0.0.1'    # force reset to local loopback
         Utils.m_subp_run(f'adb forward tcp:{self.config.port} tcp:{self.config.port}',
                          True,
                          stdout=subprocess.DEVNULL)
@@ -167,7 +163,7 @@ class Webcam:
 
         if not mod_loaded:
             self.logger.info(f'load kernel module: {mod_name} ..')
-            Utils.m_subp_run(f'sudo modprobe {mod_name} {mod_args}', True)
+            Utils.m_subp_run(f'{Const.MODPROBE} {mod_name} {mod_args}', True)
 
     def get_v4l2_virtual_dev(self) -> str:
         for vdev in os.scandir('/sys/devices/virtual/video4linux/'):
@@ -315,7 +311,7 @@ class Webcam:
 
     def run(self, argv: List[str]):
         try:
-            args = Utils.parse_args(argv)
+            args = self.parse_args(argv)
             self.config = Config.model_validate(vars(args))
         except Exception as e:
             print(f'** failed to parse args and init config: {e}')
