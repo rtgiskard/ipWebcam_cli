@@ -26,7 +26,7 @@ class Utils:
     def parse_args(argv: List[str]) -> argparse.Namespace:
         parser = argparse.ArgumentParser(
             prog='ipWebcam_cli',
-            description='script to use IPWebcam as v4l2 webcam / sound source')
+            description='tool to use IPWebcam as v4l2 webcam or microphone')
 
         parser.add_argument('--loglevel', default='info', choices=Const.LOG_LEVELS)
         parser.add_argument('--ip', help='webcam ip addr', required=True)
@@ -162,17 +162,25 @@ class Webcam:
         else:
             return ''
 
+    def virtual_mic_setup(self, sinkname: str):
+        # TODO: audio as virtual mic setup
+        pass
+
+    def virtual_mic_cleanup(self):
+        # TODO: audio as virtual mic cleanup
+        pass
+
     def get_gst_source_elem(self, url: str) -> str:
         return (f'souphttpsrc location="{url}" is-live=true'
                 f' ssl-strict={str(self.config.ssl_strict).lower()}')
 
-    def audio_launch_gst(self, url: str, sink_name: str):
-        self.logger.info(f'audio launch (gst) to sink: {sink_name} ..')
+    def audio_launch_gst(self, url: str, sinkname: str):
+        self.logger.info(f'audio launch (gst) to sink: {sinkname} ..')
 
         sync_str = str(self.config.sync).lower()
         p = Utils.m_subp_run(
             f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
-            f' ! queue ! decodebin ! pulsesink device="{sink_name}" sync={sync_str}')
+            f' ! queue ! decodebin ! pulsesink device="{sinkname}" sync={sync_str}')
         self.subp.append(p)
 
     def video_launch_gst(self, url: str, sink_dev: str):
@@ -218,6 +226,9 @@ class Webcam:
         self.logger.info(f'web control: {url_base}')
 
         if c.audio and Utils.check_url(url_audio, c.ssl_strict):
+            if mode == 'run':
+                self.virtual_mic_setup(c.sinkname)
+
             self.audio_launch_gst(url_audio, c.sinkname)
 
         if c.video and Utils.check_url(url_video, c.ssl_strict):
@@ -248,8 +259,14 @@ class Webcam:
         self.logger.debug(f'config:\n{self.config.model_dump_json(indent=2)}')
         self.setup(args.op)
 
-        for p in self.subp:
-            p.wait()
+        try:
+            for p in self.subp:
+                p.wait()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if args.op == 'run' and self.config.audio:
+                self.virtual_mic_cleanup()
 
 
 if __name__ == '__main__':
