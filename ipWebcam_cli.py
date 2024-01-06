@@ -54,8 +54,8 @@ class Utils:
         parser.add_argument('--vmethod',
                             help='video capture method',
                             dest='v_method',
-                            default='ffmpeg',
-                            choices=['ffmpeg', 'gst'])
+                            default='gst',
+                            choices=['gst', 'ffmpeg', 'mpv'])
         parser.add_argument('--fps', help='gst video fps', dest='v_fps', default='60/1')
         parser.add_argument('--sync', help='enable gst timesync', action='store_true')
 
@@ -126,8 +126,8 @@ class Config(BaseModel):
     audio: bool = Field(default=True, description='enable audio capture')
     video: bool = Field(default=True, description='enable video capture')
     v_fps: str = Field(default='60/1', description='video source FPS')
-    v_method: str = Field(default='ffmpeg',
-                          pattern='(ffmpeg)|(gst)',
+    v_method: str = Field(default='gst',
+                          pattern='(gst)|(ffmpeg)|(mpv)',
                           description='video capture method')
     a_codec: str = Field(default='opus',
                          pattern='(opus)|(aac)|(wav)',
@@ -208,14 +208,21 @@ class Webcam:
                              f' ! queue ! decodebin ! pulsesink {sink_args}')
         self.subp.append(p)
 
-    def video_launch_gst(self, url: str, sink_dev: str):
+    def video_launch_gst(self, url: str, sink_dev: str = ''):
         self.logger.info(f'video launch (gst) to sink: {sink_dev} ..')
+
+        if sink_dev:
+            sink_args = 'videoscale ! video/x-raw,format=YUY2 ! '
+            sink_args += f'tee ! v4l2sink device={sink_dev}'
+        else:
+            sink_args = 'autovideosink'
+
+        sink_args += ' sync=' + str(self.config.sync).lower()
 
         p = Utils.m_subp_run(
             f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)} do-timestamp=true'
             f' ! queue ! multipartdemux ! image/jpeg,framerate={self.config.v_fps}'
-            f' ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=YUY2'
-            f' ! tee ! v4l2sink device={sink_dev} sync=' + str(self.config.sync).lower())
+            f' ! decodebin ! videoconvert ! {sink_args}')
         self.subp.append(p)
 
     def video_launch_ffmpeg(self, url: str, sink_dev: str):
@@ -257,8 +264,24 @@ class Webcam:
                 self.audio_launch_gst(url_audio, c.sinkname)
 
         if c.video and Utils.check_url(url_video, c.ssl_strict):
+            mode_methods = {
+                'test': ('gst', 'mpv'),
+                'run': ('gst', 'ffmpeg'),
+            }
+
+            method_handlers = {
+                'gst': self.video_launch_gst,
+                'ffmpeg': self.video_launch_ffmpeg,
+                'mpv': self.video_play_mpv,
+            }
+
+            if not (mode in mode_methods and c.v_method in mode_methods[mode]):
+                self.logger.warning(f'mode {mode}: {c.v_method} method not supported')
+                return
+
             if mode == 'test':    # display video without v4l2
-                self.video_play_mpv(url_video)
+                method_handlers[c.v_method](url_video)
+
             else:    # launch to v4l2 sink device as virtual webcam
                 self.load_kmod_v4l2loopback()
 
@@ -266,10 +289,7 @@ class Webcam:
                 if not sink_dev:
                     return ''
 
-                { # the loader map, maybe lambda style ..
-                    'gst': self.video_launch_gst,
-                    'ffmpeg': self.video_launch_ffmpeg,
-                }[c.v_method](url_video, sink_dev)
+                method_handlers[c.v_method](url_video, sink_dev)
 
     def run(self, argv: List[str]):
         try:
