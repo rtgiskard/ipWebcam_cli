@@ -84,9 +84,9 @@ class Utils:
         logging.getLogger('urllib3').setLevel(logging.WARNING)
 
     @staticmethod
-    def m_subp_run(cmd: str, wait: bool = False) -> subprocess.Popen:
-        logging.getLogger('subprocess').debug(cmd)
-        p = subprocess.Popen(cmd, shell=True)
+    def m_subp_run(cmd: str | List[str], wait: bool = False, **kwargs) -> subprocess.Popen:
+        logging.getLogger('subp').debug(cmd)
+        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), **kwargs)
         if p and wait:
             p.wait()
         return p
@@ -138,6 +138,7 @@ class Config(BaseModel):
 class Webcam:
     config: Config
     subp: List[subprocess.Popen] = []
+    pw_rules: List[str] = []
 
     def __init__(self):
         self.logger = logging.getLogger('main')
@@ -163,35 +164,58 @@ class Webcam:
             return ''
 
     def virtual_mic_setup(self, sinkname: str):
-        # TODO: audio as virtual mic setup
-        pass
+        self.logger.info(f'setup virtual microphone for sink: {sinkname} ..')
+        PA_LOAD = 'pactl load-module module-null-sink'
+
+        # TODO: the virtual Mic may not appear in gnome's settings, and once
+        #   user switch the audio output device, the pw-link will be reset
+
+        self.logger.debug('create virual microphone ..')
+        cmd = f'{PA_LOAD} media.class=Audio/Source/Virtual'
+        cmd += f' sink_name={sinkname}.Mic channel_map=front-left,front-right'
+        p = Utils.m_subp_run(cmd, stdout=subprocess.PIPE)
+        rule_id, _ = p.communicate()
+        self.pw_rules.append(rule_id.decode())
+
+        self.logger.debug('create virual sink ..')
+        cmd = f'{PA_LOAD} media.class=Audio/Sink sink_name={sinkname} channel_map=stereo'
+        p = Utils.m_subp_run(cmd, stdout=subprocess.PIPE)
+        rule_id, _ = p.communicate()
+        self.pw_rules.append(rule_id.decode())
+
+        self.logger.debug('link sink to microphone ..')
+        Utils.m_subp_run(f'pw-link {sinkname}:monitor_FL {sinkname}.Mic:input_FL')
+        Utils.m_subp_run(f'pw-link {sinkname}:monitor_FR {sinkname}.Mic:input_FR')
 
     def virtual_mic_cleanup(self):
-        # TODO: audio as virtual mic cleanup
-        pass
+        for rule in self.pw_rules:
+            Utils.m_subp_run(f'pactl unload-module {rule}')
+
+        self.pw_rules.clear()
 
     def get_gst_source_elem(self, url: str) -> str:
-        return (f'souphttpsrc location="{url}" is-live=true'
-                f' ssl-strict={str(self.config.ssl_strict).lower()}')
+        return f'souphttpsrc location="{url}" is-live=true ssl-strict=' + \
+                str(self.config.ssl_strict).lower()
 
-    def audio_launch_gst(self, url: str, sinkname: str):
+    def audio_launch_gst(self, url: str, sinkname: str = ''):
         self.logger.info(f'audio launch (gst) to sink: {sinkname} ..')
 
-        sync_str = str(self.config.sync).lower()
-        p = Utils.m_subp_run(
-            f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
-            f' ! queue ! decodebin ! pulsesink device="{sinkname}" sync={sync_str}')
+        sink_args = 'sync=' + str(self.config.sync).lower()
+        if sinkname:
+            sink_args += f' device={sinkname}'
+
+        p = Utils.m_subp_run(f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)}'
+                             f' ! queue ! decodebin ! pulsesink {sink_args}')
         self.subp.append(p)
 
     def video_launch_gst(self, url: str, sink_dev: str):
         self.logger.info(f'video launch (gst) to sink: {sink_dev} ..')
 
-        sync_str = str(self.config.sync).lower()
         p = Utils.m_subp_run(
             f'{Const.GST_LAUNCH} {self.get_gst_source_elem(url)} do-timestamp=true'
             f' ! queue ! multipartdemux ! image/jpeg,framerate={self.config.v_fps}'
             f' ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=YUY2'
-            f' ! tee ! v4l2sink device="{sink_dev}" sync={sync_str}')
+            f' ! tee ! v4l2sink device={sink_dev} sync=' + str(self.config.sync).lower())
         self.subp.append(p)
 
     def video_launch_ffmpeg(self, url: str, sink_dev: str):
@@ -223,13 +247,14 @@ class Webcam:
         url_video = f'{url_base}/video'
         url_audio = f'{url_base}/audio.{c.a_codec}'
 
-        self.logger.info(f'web control: {url_base}')
+        self.logger.info(f'>> web control: {url_base}')
 
         if c.audio and Utils.check_url(url_audio, c.ssl_strict):
-            if mode == 'run':
+            if mode == 'test':
+                self.audio_launch_gst(url_audio)
+            else:
                 self.virtual_mic_setup(c.sinkname)
-
-            self.audio_launch_gst(url_audio, c.sinkname)
+                self.audio_launch_gst(url_audio, c.sinkname)
 
         if c.video and Utils.check_url(url_video, c.ssl_strict):
             if mode == 'test':    # display video without v4l2
@@ -267,6 +292,8 @@ class Webcam:
         finally:
             if args.op == 'run' and self.config.audio:
                 self.virtual_mic_cleanup()
+
+        self.subp.clear()
 
 
 if __name__ == '__main__':
